@@ -5,7 +5,7 @@ import os
 from playwright.async_api import async_playwright
 
 async def main():
-    with open("filtered_products_to_upload.json", "r", encoding="utf-8") as f:
+    with open("demo_products.json", "r", encoding="utf-8") as f:
         products = json.load(f)
         
     print(f"Loaded {len(products)} products from JSON.")
@@ -14,10 +14,6 @@ async def main():
     csv_file = open("upload_results.csv", "w", newline="", encoding="utf-8")
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(["Name", "Status", "Message"])
-    
-    success_count = 0
-    skipped_count = 0
-    failed_count = 0
     
     async with async_playwright() as p:
         print("Launching browser...")
@@ -36,13 +32,14 @@ async def main():
                 await search_input.fill(product['name'])
                 await page.wait_for_timeout(2000) # wait for results
                 
+                # Check if it exists in the table
+                # The name is usually in a <td>
                 existing_item = page.locator(f"td:has-text(\"{product['name']}\")")
                 count = await existing_item.count()
                 
                 if count > 0:
-                    print(f"-> Looks good! This product is already on the portal. Skipping.")
+                    print(f"-> Already exists! Skipping.")
                     csv_writer.writerow([product['name'], "Skipped", "Already exists"])
-                    skipped_count += 1
                     await search_input.fill("") # clear search
                     await page.wait_for_timeout(1000)
                     continue
@@ -52,11 +49,12 @@ async def main():
                 await page.wait_for_timeout(1000)
                 
                 # 2. Click New Product
-                print("-> Uploading new product...")
+                print("-> Clicking 'New product'...")
                 new_prod_btn = page.get_by_text("New product", exact=True)
                 await new_prod_btn.wait_for(state="visible", timeout=5000)
                 await new_prod_btn.click()
                 
+                print("-> Filling form...")
                 await page.get_by_role("button", name="Create product").wait_for(state="visible", timeout=5000)
                 
                 await page.locator('input[name="name"]').fill(product['name'])
@@ -67,25 +65,27 @@ async def main():
                     await page.locator('input[name="shelfLifeDays"]').fill(product['shelf_life'])
                     
                 if product['image_path'] and os.path.exists(product['image_path']):
+                    print("-> Uploading image...")
                     await page.locator('input[type="file"]').set_input_files(product['image_path'])
+                else:
+                    print("-> No image found or invalid path.")
                     
                 # 3. Submit
+                print("-> Submitting...")
                 await page.get_by_role("button", name="Create product").click()
                 
                 # 4. Wait for success
                 await page.get_by_text("Create product", exact=True).wait_for(state="hidden", timeout=15000)
-                print("-> Successfully created!")
+                print("-> Success!")
                 csv_writer.writerow([product['name'], "Success", "Created"])
-                success_count += 1
                 
                 await page.wait_for_timeout(1000) # brief pause before next
                 
             except Exception as e:
-                print(f"-> Encountered an issue: {str(e)}")
+                print(f"-> ERROR: {str(e)}")
                 csv_writer.writerow([product['name'], "Failed", str(e)])
-                failed_count += 1
                 
-                # Try to recover
+                # Try to recover by closing modal if it's open, or refreshing
                 try:
                     cancel_btn = page.get_by_role("button", name="Cancel")
                     if await cancel_btn.count() > 0:
@@ -100,22 +100,7 @@ async def main():
         await browser.close()
     
     csv_file.close()
-    
-    print("\n" + "="*50)
-    print("🎉 ALL FINISHED! HERE IS YOUR SUMMARY:")
-    print("="*50)
-    print(f"✅ Successfully Uploaded: {success_count}")
-    print(f"⏭️  Already Existed (Skipped): {skipped_count}")
-    print(f"❌ Failed to Upload: {failed_count}")
-    print("="*50)
-    
-    if success_count == 0 and skipped_count == len(products):
-        print("💡 Message: You are completely up to date! All products are already on the portal.")
-    elif failed_count > 0:
-        print("⚠️ Message: Some items failed. Please check upload_results.csv for details.")
-    else:
-        print("💡 Message: Upload complete and perfectly synced!")
-    print("="*50 + "\n")
+    print("\nBulk upload complete! Check upload_results.csv for details.")
 
 if __name__ == "__main__":
     asyncio.run(main())
