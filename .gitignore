@@ -1,0 +1,28 @@
+# Virtual Environment
+venv/
+
+# Confidential Authentication Data
+auth_state.json
+
+# Confidential Company Data & Reports
+*.pdf
+product_list.txt
+*.json
+!requirements.txt
+skipped_products_report.txt
+upload_results.csv
+
+# Confidential HTML Dumps
+*.html
+*.txt
+!requirements.txt
+
+# Images folder
+o_mama_pictures/
+
+# OS / Python Cache
+__pycache__/
+.DS_Store
+*.zip
+
+*.rar
